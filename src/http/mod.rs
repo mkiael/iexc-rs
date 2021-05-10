@@ -1,6 +1,14 @@
+use std::error;
+use std::io;
 use std::io::prelude::*;
-use std::io::{BufReader, Error, ErrorKind};
 use std::net::TcpStream;
+use std::sync::Arc;
+
+use rustls;
+use webpki;
+use webpki_roots;
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 pub struct Response {
     pub protocol_version: String,
@@ -11,7 +19,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn parse<R: BufRead>(reader: &mut R) -> Result<Response, Error> {
+    pub fn parse<R: BufRead>(reader: &mut R) -> Result<Response> {
         let mut status_line = String::new();
         reader.read_line(&mut status_line)?;
 
@@ -41,7 +49,7 @@ impl Response {
     }
 }
 
-fn parse_status_line(status_line: &String) -> Result<(String, u16, String), Error> {
+fn parse_status_line(status_line: &String) -> Result<(String, u16, String)> {
     let status_fields: Vec<&str> = status_line.trim_end().split_whitespace().collect();
     if status_fields.len() == 3 {
         Ok((
@@ -50,23 +58,23 @@ fn parse_status_line(status_line: &String) -> Result<(String, u16, String), Erro
             status_fields[2].to_string(),
         ))
     } else {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::InvalidData,
             "Unable to parse status line",
-        ));
+        )));
     }
 }
 
-fn parse_header(header_line: &String) -> Result<(String, String), Error> {
+fn parse_header(header_line: &String) -> Result<(String, String)> {
     match header_line.split_once(":") {
         Some((key, value)) => Ok((
             key.to_ascii_lowercase().to_string(),
             value.trim().to_ascii_lowercase().to_string(),
         )),
-        _ => Err(Error::new(
-            ErrorKind::InvalidData,
+        _ => Err(Box::new(io::Error::new(
+            io::ErrorKind::InvalidData,
             "Unable to parse header line",
-        )),
+        ))),
     }
 }
 
@@ -77,29 +85,63 @@ fn find_content_length(headers: &Vec<(String, String)>) -> u64 {
     }
 }
 
+trait Stream: io::Read + io::Write {}
+impl<T: io::Read + io::Write> Stream for T {}
+
 pub struct Client {
     domain: String,
     port: i16,
+    insecure: bool,
 }
 
 impl Client {
     pub fn new(domain: String) -> Self {
-        Self { domain, port: 80 }
+        Self {
+            domain,
+            port: 443,
+            insecure: false,
+        }
     }
 
-    pub fn get(&self) -> Result<Response, Error> {
-        let mut socket = TcpStream::connect(format!("{}:{}", self.domain, self.port))?;
+    pub fn new_insecure(domain: String) -> Self {
+        Self {
+            domain,
+            port: 80,
+            insecure: true,
+        }
+    }
+
+    pub fn get(&self, path: &str) -> Result<Response> {
+        let mut stream = self.create_stream()?;
 
         write!(
-            socket,
-            "GET / HTTP/1.1\r\n\
+            stream,
+            "GET {} HTTP/1.1\r\n\
             Host: {}\r\n\
             Accept: */*\r\n\
             \r\n",
-            self.domain
+            path, self.domain
         )?;
 
-        Response::parse(&mut BufReader::new(socket))
+        Response::parse(&mut io::BufReader::new(stream))
+    }
+
+    fn create_stream(&self) -> Result<Box<dyn Stream>> {
+        if self.insecure {
+            match TcpStream::connect(format!("{}:{}", self.domain, self.port)) {
+                Ok(stream) => Ok(Box::new(stream)),
+                Err(e) => Err(Box::new(e)),
+            }
+        } else {
+            let mut config = rustls::ClientConfig::new();
+            config
+                .root_store
+                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+            let dns_name = webpki::DNSNameRef::try_from_ascii_str(self.domain.as_str())?;
+            let session = rustls::ClientSession::new(&Arc::new(config), dns_name);
+            let socket = TcpStream::connect(format!("{}:{}", self.domain, self.port))?;
+            Ok(Box::new(rustls::StreamOwned::new(session, socket)))
+        }
     }
 }
 
@@ -137,11 +179,11 @@ mod tests {
                              Server: Apache/2.2.8 (Ubuntu) mod_ssl/2.2.8 OpenSSL/0.9.8g\r\n\
                              \r\n" as &[u8];
 
-         match Response::parse(&mut response) {
-             Ok(_) => assert!(false),
-             Err(e) => {
-                 assert_eq!(e.kind(), ErrorKind::InvalidData);
-             }
+        match Response::parse(&mut response) {
+            Ok(_) => assert!(false),
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::InvalidData);
+            }
         }
     }
 }
