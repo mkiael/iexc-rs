@@ -50,18 +50,24 @@ impl Response {
 }
 
 fn parse_status_line(status_line: &String) -> Result<(String, u16, String)> {
-    let status_fields: Vec<&str> = status_line.trim_end().split_whitespace().collect();
-    if status_fields.len() == 3 {
-        Ok((
-            status_fields[0].to_string(),
-            status_fields[1].parse::<u16>().unwrap(),
-            status_fields[2].to_string(),
-        ))
+    if let Some((version, rest1)) = status_line.split_once(" ") {
+        if let Some((status_code, rest2)) = rest1.split_once(" ") {
+            Ok((
+                version.trim().to_string(),
+                status_code.trim().parse::<u16>().unwrap(),
+                rest2.trim().to_string(),
+            ))
+        } else {
+            Err(Box::new(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unable to parse status code",
+            )))
+        }
     } else {
-        return Err(Box::new(io::Error::new(
+        Err(Box::new(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Unable to parse status line",
-        )));
+            "Unable to parse protocol version",
+        )))
     }
 }
 
@@ -148,7 +154,6 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use crate::http::Response;
-    use std::io::ErrorKind;
 
     #[test]
     fn test_parse_valid_response() {
@@ -173,6 +178,20 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_long_status_line() {
+        let mut response = b"HTTP/1.1 301 Moved to some nice place\n\r\
+                             Date: Sun, 10 Oct 2010 23:26:07 GMT\r\n\
+                             Server: Apache/2.2.8 (Ubuntu) mod_ssl/2.2.8 OpenSSL/0.9.8g\r\n\
+                             \r\n" as &[u8];
+
+        let resp = Response::parse(&mut response).unwrap();
+
+        assert_eq!(resp.protocol_version, "HTTP/1.1");
+        assert_eq!(resp.status_code, 301);
+        assert_eq!(resp.status_message, "Moved to some nice place");
+    }
+
+    #[test]
     fn test_parse_invalid_status() {
         let mut response = b"OK\n\r\
                              Date: Sun, 10 Oct 2010 23:26:07 GMT\r\n\
@@ -181,9 +200,7 @@ mod tests {
 
         match Response::parse(&mut response) {
             Ok(_) => assert!(false),
-            Err(e) => {
-                assert_eq!(e.kind(), ErrorKind::InvalidData);
-            }
+            Err(_) => (),
         }
     }
 }
