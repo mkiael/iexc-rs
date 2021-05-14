@@ -1,5 +1,5 @@
-use iexc;
 use clap::{App, Arg};
+use iexc;
 
 fn main() {
     let matches = App::new("IEXC")
@@ -7,11 +7,11 @@ fn main() {
         .author("Mikael L. <c.mikael.larsson@gmail.com>")
         .arg(
             Arg::new("API token")
-            .short('a')
-            .long("api-token")
-            .value_name("TOKEN")
-            .about("API token used for all requests to IEX endpoints")
-            .takes_value(true),
+                .short('a')
+                .long("api-token")
+                .value_name("TOKEN")
+                .about("API token used for all requests to IEX endpoints")
+                .takes_value(true),
         )
         .get_matches();
 
