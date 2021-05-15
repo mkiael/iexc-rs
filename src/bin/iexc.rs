@@ -6,18 +6,27 @@ fn main() {
         .version("0.1")
         .author("Mikael L. <c.mikael.larsson@gmail.com>")
         .arg(
-            Arg::new("API token")
+            Arg::new("api token")
                 .short('a')
                 .long("api-token")
+                .required(true)
                 .value_name("TOKEN")
                 .about("API token used for all requests to IEX endpoints")
                 .takes_value(true),
         )
+        .arg(
+            Arg::new("sandbox")
+                .short('s')
+                .long("sandbox")
+                .about("Use sandbox endpoint"),
+        )
         .get_matches();
 
-    if let Some(api_token) = matches.value_of("API token") {
-        let _client = iexc::Client::new(api_token.to_string());
+    let api_token = matches.value_of("api token").unwrap();
+
+    let _client = if matches.is_present("sandbox") {
+        iexc::Client::new_sandbox(api_token.to_string())
     } else {
-        println!("No API token given");
-    }
+        iexc::Client::new(api_token.to_string())
+    };
 }
