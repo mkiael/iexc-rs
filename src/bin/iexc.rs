@@ -30,5 +30,7 @@ fn main() {
 
     let api_token = matches.value_of("api token").unwrap();
 
-    let _client = iexc::Client::new(endpoint, api_token.to_string());
+    let client = iexc::Client::new(endpoint, api_token.to_string());
+    let latest_price_aapl = client.get_latest_price("aapl");
+    println!("Latest price for Apple: {} $", latest_price_aapl.unwrap());
 }
