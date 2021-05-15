@@ -22,11 +22,13 @@ fn main() {
         )
         .get_matches();
 
+    let endpoint = if matches.is_present("sandbox") {
+        iexc::Endpoint::Sandbox
+    } else {
+        iexc::Endpoint::Production
+    };
+
     let api_token = matches.value_of("api token").unwrap();
 
-    let _client = if matches.is_present("sandbox") {
-        iexc::Client::new_sandbox(api_token.to_string())
-    } else {
-        iexc::Client::new(api_token.to_string())
-    };
+    let _client = iexc::Client::new(endpoint, api_token.to_string());
 }
