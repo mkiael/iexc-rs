@@ -4,10 +4,6 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls;
-use webpki;
-use webpki_roots;
-
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 pub struct Response {
@@ -44,12 +40,12 @@ impl Response {
             status_code,
             status_message,
             headers,
-            body: body,
+            body,
         })
     }
 }
 
-fn parse_status_line(status_line: &String) -> Result<(String, u16, String)> {
+fn parse_status_line(status_line: &str) -> Result<(String, u16, String)> {
     if let Some((version, rest1)) = status_line.split_once(" ") {
         if let Some((status_code, rest2)) = rest1.split_once(" ") {
             Ok((
@@ -71,11 +67,11 @@ fn parse_status_line(status_line: &String) -> Result<(String, u16, String)> {
     }
 }
 
-fn parse_header(header_line: &String) -> Result<(String, String)> {
+fn parse_header(header_line: &str) -> Result<(String, String)> {
     match header_line.split_once(":") {
         Some((key, value)) => Ok((
-            key.to_ascii_lowercase().to_string(),
-            value.trim().to_ascii_lowercase().to_string(),
+            key.to_ascii_lowercase(),
+            value.trim().to_ascii_lowercase(),
         )),
         _ => Err(Box::new(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -84,7 +80,7 @@ fn parse_header(header_line: &String) -> Result<(String, String)> {
     }
 }
 
-fn find_content_length(headers: &Vec<(String, String)>) -> u64 {
+fn find_content_length(headers: &[(String, String)]) -> u64 {
     match headers.iter().find(|t| t.0.eq("content-length")) {
         Some(t) => t.1.parse::<u64>().unwrap(),
         _ => 0,
@@ -109,7 +105,7 @@ impl Client {
         }
     }
 
-    pub fn new_insecure(domain: String) -> Self {
+    pub fn _new_insecure(domain: String) -> Self {
         Self {
             domain,
             port: 80,

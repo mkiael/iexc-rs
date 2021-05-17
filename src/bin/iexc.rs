@@ -1,5 +1,4 @@
 use clap::{App, Arg};
-use iexc;
 
 fn main() {
     let matches = App::new("IEXC")
